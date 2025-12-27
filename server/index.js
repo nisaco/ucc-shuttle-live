@@ -73,40 +73,40 @@ io.on("connection", (socket) => {
 
 
 
-// ---------------------------------------------------------
-// 🚀 DEPLOYMENT CONFIG (The Fix)
-// ---------------------------------------------------------
-const fs = require('fs'); // Import file system to check folders
+// ... (Keep all your imports and socket code above unchanged) ...
 
-// 1. Define the path to the frontend folder
+// ---------------------------------------------------------
+// 🚀 DEPLOYMENT CONFIG
+// ---------------------------------------------------------
+const fs = require('fs');
+
+// 1. Define path to frontend
 const frontendPath = path.join(__dirname, "../frontend-app");
 
-// 2. INTELLIGENT PATH CHECK:
-// Check if 'build' exists. If not, assume it's 'dist' (Vite).
+// 2. Smart Check: Is it 'build' or 'dist'?
 let buildFolder = path.join(frontendPath, "build");
-
 if (!fs.existsSync(buildFolder)) {
-    console.log("⚠️ 'build' folder not found. Switching to 'dist'...");
     buildFolder = path.join(frontendPath, "dist");
 }
 
 console.log("✅ Serving Frontend from:", buildFolder);
 
-// 3. Serve the files
+// 3. Serve Static Files
 app.use(express.static(buildFolder));
 
-// 4. Catch-All Route
-app.get("*", (req, res) => {
+// 4. Catch-All Route (THE FIX IS HERE)
+// We changed "*" to a Regex /^(.*)$/ to fix the PathError
+app.get(/^(.*)$/, (req, res) => {
   const indexFile = path.join(buildFolder, "index.html");
   
   if (fs.existsSync(indexFile)) {
     res.sendFile(indexFile);
   } else {
+    // If we still can't find it, show a helpful error on screen
     res.status(404).send(`
-      <h1>404 Error</h1>
-      <p>Server is running, but Frontend build not found.</p>
+      <h1>Frontend Not Found</h1>
+      <p>Server is running, but index.html is missing.</p>
       <p>Looked in: ${buildFolder}</p>
-      <p>Make sure your Render Build Command includes: <b>npm run build --prefix frontend-app</b></p>
     `);
   }
 });
