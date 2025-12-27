@@ -1,0 +1,130 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+:root {
+  --primary: #00205b; /* UCC Navy */
+  --accent: #ce1126;  /* UCC Red */
+  --bg: #f3f4f6;
+  --surface: #ffffff;
+  --text-main: #111827;
+  --text-sub: #6b7280;
+  --success: #10b981;
+  --error: #ef4444;
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  --glass: rgba(255, 255, 255, 0.9);
+}
+
+/* --- GLOBAL RESET --- */
+* {
+  box-sizing: border-box; /* Ensures padding doesn't break width */
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  background-color: var(--bg);
+  color: var(--text-main);
+  margin: 0;
+  padding: 0;
+  overflow: hidden; /* Prevents double scrollbars on mobile */
+  -webkit-font-smoothing: antialiased;
+}
+
+/* --- BUTTONS --- */
+button {
+  font-family: inherit;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  user-select: none; /* Prevents text highlighting on buttons */
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 24px;
+  border-radius: 12px;
+  font-weight: 600;
+  border: none;
+  font-size: 15px;
+  box-shadow: var(--shadow-sm);
+  text-decoration: none;
+}
+
+.btn-primary { background: var(--primary); color: white; }
+.btn-primary:active { transform: scale(0.98); }
+
+.btn-accent { background: var(--accent); color: white; }
+.btn-accent:disabled { background: #ecaeb4; cursor: not-allowed; }
+.btn-success { background: var(--success); color: white; }
+
+.btn-outline {
+  background: transparent;
+  border: 2px solid var(--primary);
+  color: var(--primary);
+}
+
+.btn-ghost { background: transparent; color: var(--text-sub); box-shadow: none; }
+
+/* --- CARDS & INPUTS --- */
+.card {
+  background: var(--surface);
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: var(--shadow-lg);
+  border: 1px solid rgba(0,0,0,0.05);
+}
+
+input, select {
+  width: 100%;
+  padding: 14px;
+  border-radius: 10px;
+  border: 1px solid #e5e7eb;
+  font-size: 15px;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  background: #fff;
+}
+
+/* FIXED: Replaced invalid 'ring' property with box-shadow */
+input:focus, select:focus { 
+  border-color: var(--primary); 
+  box-shadow: 0 0 0 3px rgba(0, 32, 91, 0.2); /* Soft Blue Glow */
+}
+
+/* --- MAP OVERLAYS (GLASSMORPHISM) --- */
+.overlay-panel {
+  position: absolute;
+  background: var(--glass);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  padding: 16px;
+  border-radius: 16px;
+  box-shadow: var(--shadow-lg);
+  z-index: 1000;
+}
+
+.status-badge {
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.badge-online { background: #d1fae5; color: #065f46; }
+.badge-offline { background: #fee2e2; color: #991b1b; }
+
+/* --- ANIMATIONS --- */
+@keyframes slideUp {
+  from { transform: translateY(100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.slide-up { animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
+
+/* --- LEAFLET MAP FIXES --- */
+.leaflet-container {
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+}

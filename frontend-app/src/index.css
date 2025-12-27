@@ -1,0 +1,14 @@
+/* Reset the browser defaults */
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden; /* Stops scrolling bars */
+}
+
+/* Make sure the map takes up space */
+.leaflet-container {
+  width: 100%;
+  height: 100vh; /* 100% of the Viewport Height */
+}
