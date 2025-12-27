@@ -3,7 +3,8 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const http = require('http');
 const { Server } = require("socket.io");
-const path = require("path"); // Required for deployment
+const path = require("path");
+const fs = require('fs');
 
 const app = express();
 app.use(cors());
@@ -17,7 +18,7 @@ const io = new Server(server, {
   }
 });
 
-// --- 1. DATABASE CONNECTION (Cloud) ---
+// --- DATABASE CONNECTION ---
 const MONGO_URI = "mongodb+srv://aj_data:n11kpakpo@cluster0.gvgekn1.mongodb.net/ucc_shuttle?appName=Cluster0";
 
 mongoose.connect(MONGO_URI)
@@ -27,7 +28,7 @@ mongoose.connect(MONGO_URI)
 const BusSchema = new mongoose.Schema({ name: String, route: String, status: String });
 const Bus = mongoose.model('Bus', BusSchema);
 
-// --- 2. API ROUTES ---
+// --- API ROUTES ---
 app.get('/api/buses', async (req, res) => {
   try {
     const buses = await Bus.find();
@@ -43,8 +44,17 @@ app.post('/api/buses', async (req, res) => {
   res.json(newBus);
 });
 
-// --- 3. REAL-TIME SOCKET LOGIC ---
+// --- REAL-TIME SOCKET LOGIC ---
 let activeBuses = []; 
+
+// 🚨 ADMIN RESET ROUTE (New Feature)
+// Visit this link to wipe the map clean if it glitches
+app.get('/api/admin/reset', (req, res) => {
+  activeBuses = [];
+  io.emit("updateMap", activeBuses);
+  console.log("🧹 Admin cleared the map.");
+  res.send("✅ Map has been wiped clean. All buses removed.");
+});
 
 io.on("connection", (socket) => {
   console.log("User Connected:", socket.id);
@@ -67,50 +77,26 @@ io.on("connection", (socket) => {
     io.emit("updateMap", activeBuses);
   });
   
-  // Keep-Alive Ping
   app.get('/ping', (req, res) => res.send('pong'));
 });
 
-
-
-// ... (Keep all your imports and socket code above unchanged) ...
-
-// ---------------------------------------------------------
-// 🚀 DEPLOYMENT CONFIG
-// ---------------------------------------------------------
-const fs = require('fs');
-
-// 1. Define path to frontend
+// --- DEPLOYMENT CONFIG ---
 const frontendPath = path.join(__dirname, "../frontend-app");
-
-// 2. Smart Check: Is it 'build' or 'dist'?
 let buildFolder = path.join(frontendPath, "build");
 if (!fs.existsSync(buildFolder)) {
     buildFolder = path.join(frontendPath, "dist");
 }
 
-console.log("✅ Serving Frontend from:", buildFolder);
-
-// 3. Serve Static Files
 app.use(express.static(buildFolder));
 
-// 4. Catch-All Route (THE FIX IS HERE)
-// We changed "*" to a Regex /^(.*)$/ to fix the PathError
 app.get(/^(.*)$/, (req, res) => {
   const indexFile = path.join(buildFolder, "index.html");
-  
   if (fs.existsSync(indexFile)) {
     res.sendFile(indexFile);
   } else {
-    // If we still can't find it, show a helpful error on screen
-    res.status(404).send(`
-      <h1>Frontend Not Found</h1>
-      <p>Server is running, but index.html is missing.</p>
-      <p>Looked in: ${buildFolder}</p>
-    `);
+    res.status(404).send(`<h1>Frontend Not Found</h1><p>Looked in: ${buildFolder}</p>`);
   }
 });
-// ---------------------------------------------------------
 
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
