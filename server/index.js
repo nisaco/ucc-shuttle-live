@@ -71,19 +71,44 @@ io.on("connection", (socket) => {
   app.get('/ping', (req, res) => res.send('pong'));
 });
 
+
+
 // ---------------------------------------------------------
-// 🚀 DEPLOYMENT CONFIG (Serve Frontend)
+// 🚀 DEPLOYMENT CONFIG (The Fix)
 // ---------------------------------------------------------
+const fs = require('fs'); // Import file system to check folders
 
-// ⚠️ IMPORTANT: If you use Vite, change 'build' to 'dist' in the two lines below:
-const BUILD_PATH = path.join(__dirname, "../frontend-app/build");
+// 1. Define the path to the frontend folder
+const frontendPath = path.join(__dirname, "../frontend-app");
 
-// 1. Serve static files
-app.use(express.static(BUILD_PATH));
+// 2. INTELLIGENT PATH CHECK:
+// Check if 'build' exists. If not, assume it's 'dist' (Vite).
+let buildFolder = path.join(frontendPath, "build");
 
-// 2. Catch-All Route (Sends React App)
+if (!fs.existsSync(buildFolder)) {
+    console.log("⚠️ 'build' folder not found. Switching to 'dist'...");
+    buildFolder = path.join(frontendPath, "dist");
+}
+
+console.log("✅ Serving Frontend from:", buildFolder);
+
+// 3. Serve the files
+app.use(express.static(buildFolder));
+
+// 4. Catch-All Route
 app.get("*", (req, res) => {
-  res.sendFile(path.join(BUILD_PATH, "index.html"));
+  const indexFile = path.join(buildFolder, "index.html");
+  
+  if (fs.existsSync(indexFile)) {
+    res.sendFile(indexFile);
+  } else {
+    res.status(404).send(`
+      <h1>404 Error</h1>
+      <p>Server is running, but Frontend build not found.</p>
+      <p>Looked in: ${buildFolder}</p>
+      <p>Make sure your Render Build Command includes: <b>npm run build --prefix frontend-app</b></p>
+    `);
+  }
 });
 // ---------------------------------------------------------
 
