@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
 import io from "socket.io-client";
-import { MapPin, Bus, Navigation, User, Shield, AlertCircle } from "lucide-react";
 
 // --- CONFIGURATION ---
 const SERVER_URL = "https://ucc-shuttle-live.onrender.com"; 
