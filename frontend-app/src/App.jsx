@@ -11,11 +11,11 @@ const socket = io.connect(SERVER_URL);
 const styles = `
   :root {
     --primary: #003366; /* UCC Blue */
+    --primary-dark: #002244;
     --accent: #f59e0b;
     --success: #10b981;
     --error: #ef4444;
     --text-sub: #6b7280;
-    --bg-gradient: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);
   }
   
   body {
@@ -23,12 +23,88 @@ const styles = `
     margin: 0;
     padding: 0;
     background-color: #f3f4f6;
+    overflow-x: hidden; /* Prevent scroll on animations */
   }
 
+  /* --- RIPPLE BACKGROUND ANIMATION --- */
+  .ripple-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: -1;
+    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+    overflow: hidden;
+  }
+
+  .ripple-circle {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.02);
+    animation: ripple 6s infinite linear;
+    width: 0;
+    height: 0;
+    opacity: 0;
+  }
+
+  /* Different delays for multiple ripples */
+  .ripple-1 { animation-delay: 0s; }
+  .ripple-2 { animation-delay: 1.5s; }
+  .ripple-3 { animation-delay: 3s; }
+  .ripple-4 { animation-delay: 4.5s; }
+
+  @keyframes ripple {
+    0% { width: 0; height: 0; opacity: 0.5; border-width: 5px; }
+    100% { width: 150vmax; height: 150vmax; opacity: 0; border-width: 0px; }
+  }
+
+  /* --- LOADING SPLASH SCREEN --- */
+  .splash-screen {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: var(--primary);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    color: white;
+    transition: opacity 0.5s ease-out;
+  }
+  
+  .loader-bus {
+    font-size: 80px;
+    animation: bounce 1s infinite alternate;
+  }
+  
+  .loading-dots:after {
+    content: '.';
+    animation: dots 1.5s steps(5, end) infinite;
+  }
+
+  @keyframes bounce {
+    from { transform: translateY(0); }
+    to { transform: translateY(-15px); }
+  }
+  
+  @keyframes dots {
+    0%, 20% { content: '.'; }
+    40% { content: '..'; }
+    60% { content: '...'; }
+    80%, 100% { content: ''; }
+  }
+
+  /* --- UI COMPONENTS --- */
   .card {
-    background: white;
+    background: rgba(255, 255, 255, 0.95); /* Slightly transparent */
+    backdrop-filter: blur(10px);
     border-radius: 20px;
-    box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+    box-shadow: 0 20px 40px rgba(0,0,0,0.2);
     padding: 30px;
     transition: transform 0.2s ease;
   }
@@ -51,8 +127,8 @@ const styles = `
     box-shadow: 0 4px 12px rgba(0, 51, 102, 0.2);
   }
   .btn-primary:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 6px 16px rgba(0, 51, 102, 0.3);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(0, 51, 102, 0.4);
   }
 
   .btn-success {
@@ -108,15 +184,34 @@ const styles = `
   .badge-offline { background-color: #fee2e2; color: #991b1b; }
 `;
 
-// --- CUSTOM MAP COMPONENT (REPLACES REACT-LEAFLET) ---
-// This component loads Leaflet dynamically from CDN to avoid build errors
+// --- NEW COMPONENT: Ripple Background ---
+const RippleBackground = () => (
+  <div className="ripple-container">
+    <div className="ripple-circle ripple-1"></div>
+    <div className="ripple-circle ripple-2"></div>
+    <div className="ripple-circle ripple-3"></div>
+    <div className="ripple-circle ripple-4"></div>
+  </div>
+);
+
+// --- NEW COMPONENT: Loading Splash Screen ---
+const SplashScreen = () => (
+  <div className="splash-screen">
+    <div className="loader-bus">🚌</div>
+    <h2 style={{ marginTop: "20px", fontWeight: "300", letterSpacing: "2px" }}>UCC SHUTTLE</h2>
+    <div style={{ opacity: 0.7, fontSize: "14px" }}>
+      Connecting to Satellite<span className="loading-dots"></span>
+    </div>
+  </div>
+);
+
+// --- CUSTOM MAP COMPONENT (CDN LOADED) ---
 const LeafletMap = ({ center, zoom, buses = [], myLocation, pickupRequests = [], onPickupDismiss }) => {
   const mapRef = useRef(null);
   const mapInstance = useRef(null);
   const markersRef = useRef({});
 
   useEffect(() => {
-    // 1. Load Leaflet CSS
     if (!document.getElementById('leaflet-css')) {
       const link = document.createElement('link');
       link.id = 'leaflet-css';
@@ -125,7 +220,6 @@ const LeafletMap = ({ center, zoom, buses = [], myLocation, pickupRequests = [],
       document.head.appendChild(link);
     }
 
-    // 2. Load Leaflet JS
     if (!window.L) {
       const script = document.createElement('script');
       script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
@@ -137,7 +231,6 @@ const LeafletMap = ({ center, zoom, buses = [], myLocation, pickupRequests = [],
     }
 
     return () => {
-      // Cleanup map instance on unmount
       if (mapInstance.current) {
         mapInstance.current.remove();
         mapInstance.current = null;
@@ -147,31 +240,24 @@ const LeafletMap = ({ center, zoom, buses = [], myLocation, pickupRequests = [],
 
   const initMap = () => {
     if (!mapRef.current || mapInstance.current) return;
-
-    // Initialize Map
     const map = window.L.map(mapRef.current, { zoomControl: false }).setView(center, zoom);
-    
     window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap'
     }).addTo(map);
-
     mapInstance.current = map;
-    updateMarkers(); // Initial render of markers
+    updateMarkers();
   };
 
-  // 3. Update Markers when props change
   useEffect(() => {
     updateMarkers();
   }, [buses, myLocation, pickupRequests]);
 
   const updateMarkers = () => {
     if (!mapInstance.current || !window.L) return;
-
     const map = mapInstance.current;
     const L = window.L;
     const activeIds = new Set();
 
-    // Icons
     const busIcon = L.icon({
       iconUrl: "https://cdn-icons-png.flaticon.com/512/3448/3448339.png",
       iconSize: [40, 40],
@@ -186,25 +272,18 @@ const LeafletMap = ({ center, zoom, buses = [], myLocation, pickupRequests = [],
       popupAnchor: [0, -17]
     });
 
-    // --- RENDER BUSES ---
     buses.forEach(bus => {
       const id = `bus-${bus.busId}`;
       activeIds.add(id);
-
       if (markersRef.current[id]) {
-        // Update existing marker
         markersRef.current[id].setLatLng([bus.lat, bus.lng]);
-        const popup = markersRef.current[id].getPopup();
-        if (popup) popup.setContent(`<b>${bus.busId}</b><br>${Math.round(bus.speed * 3.6)} km/h`);
       } else {
-        // Create new marker
         const marker = L.marker([bus.lat, bus.lng], { icon: busIcon }).addTo(map);
         marker.bindPopup(`<b>${bus.busId}</b><br>${Math.round(bus.speed * 3.6)} km/h`);
         markersRef.current[id] = marker;
       }
     });
 
-    // --- RENDER MY LOCATION (DRIVER) ---
     if (myLocation) {
       const id = 'my-loc';
       activeIds.add(id);
@@ -214,29 +293,23 @@ const LeafletMap = ({ center, zoom, buses = [], myLocation, pickupRequests = [],
         const marker = L.marker(myLocation, { icon: busIcon }).addTo(map);
         marker.bindPopup('<b>You are here</b>');
         markersRef.current[id] = marker;
-        map.setView(myLocation, 16); // Follow driver
+        map.setView(myLocation, 16);
       }
     }
 
-    // --- RENDER PICKUP REQUESTS ---
     pickupRequests.forEach((req, index) => {
-      const id = `req-${index}`; // Using index as ID for simplicity in this demo
+      const id = `req-${index}`;
       activeIds.add(id);
-
       if (!markersRef.current[id]) {
         const marker = L.marker([req.lat, req.lng], { icon: passengerIcon }).addTo(map);
-        
-        // Create a popup with a button inside
         const popupContent = document.createElement('div');
         popupContent.innerHTML = `<button style="background:#10b981; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer;">Picked Up ✅</button>`;
         popupContent.onclick = () => onPickupDismiss && onPickupDismiss(index);
-        
         marker.bindPopup(popupContent);
         markersRef.current[id] = marker;
       }
     });
 
-    // --- CLEANUP ---
     Object.keys(markersRef.current).forEach(id => {
       if (!activeIds.has(id)) {
         markersRef.current[id].remove();
@@ -248,7 +321,7 @@ const LeafletMap = ({ center, zoom, buses = [], myLocation, pickupRequests = [],
   return <div ref={mapRef} style={{ height: "100%", width: "100%", zIndex: 0 }} />;
 };
 
-// --- COMPONENT: ShuttleMap (Student View) ---
+// --- STUDENT MAP VIEW ---
 function ShuttleMap() {
   const [buses, setBuses] = useState([]);
   const [isConnected, setIsConnected] = useState(false);
@@ -257,9 +330,7 @@ function ShuttleMap() {
   useEffect(() => {
     socket.on("connect", () => setIsConnected(true));
     socket.on("disconnect", () => setIsConnected(false));
-    socket.on("updateMap", (data) => {
-      setBuses(data);
-    });
+    socket.on("updateMap", (data) => setBuses(data));
     return () => socket.off("updateMap");
   }, []);
 
@@ -279,9 +350,7 @@ function ShuttleMap() {
   };
 
   return (
-    <div style={{ position: "fixed", top: 0, left: 0, width: "100vw", height: "100vh" }}>
-      
-      {/* STATUS PILL */}
+    <div style={{ position: "fixed", top: 0, left: 0, width: "100vw", height: "100vh", background: "#f3f4f6" }}>
       <div className="overlay-panel" style={{ top: "20px", left: "50%", transform: "translateX(-50%)", padding: "8px 16px", borderRadius: "30px", display: "flex", gap: "10px", alignItems: "center" }}>
         <div className={`status-badge ${isConnected ? 'badge-online' : 'badge-offline'}`}>
           {isConnected ? "Live" : "Connecting..."}
@@ -291,19 +360,11 @@ function ShuttleMap() {
         </span>
       </div>
 
-      {/* MAP */}
-      <LeafletMap 
-        center={[5.1036, -1.2825]} 
-        zoom={15} 
-        buses={buses}
-      />
+      <LeafletMap center={[5.1036, -1.2825]} zoom={15} buses={buses} />
 
-      {/* HAIL BUTTON */}
-      <div className="overlay-panel slide-up" style={{ bottom: "0", left: "0", right: "0", borderRadius: "24px 24px 0 0", padding: "30px", display: "flex", flexDirection: "column", gap: "10px" }}>
-        <div>
-          <h3 style={{ margin: "0", color: "var(--primary)" }}>Need a ride?</h3>
-          <p style={{ margin: "5px 0 20px 0", color: "var(--text-sub)", fontSize: "14px" }}>Request a stop at your current location.</p>
-        </div>
+      <div className="overlay-panel slide-up" style={{ bottom: "0", left: "0", right: "0", borderRadius: "24px 24px 0 0", padding: "30px" }}>
+        <h3 style={{ margin: "0", color: "var(--primary)" }}>Need a ride?</h3>
+        <p style={{ margin: "5px 0 20px 0", color: "var(--text-sub)", fontSize: "14px" }}>Request a stop at your current location.</p>
         <button 
           onClick={handleHail} 
           className="btn btn-primary"
@@ -315,12 +376,11 @@ function ShuttleMap() {
           {hailStatus === 'sent' && "✅ Driver Notified!"}
         </button>
       </div>
-
     </div>
   );
 }
 
-// --- COMPONENT: DriverLogin ---
+// --- DRIVER LOGIN ---
 function DriverLogin() {
   const [buses, setBuses] = useState([]);
   const [selectedBus, setSelectedBus] = useState("");
@@ -329,58 +389,38 @@ function DriverLogin() {
   const [myLocation, setMyLocation] = useState(null);
   const wakeLockRef = useRef(null);
 
-  // 1. Fetch Buses & Listen for Pickups
   useEffect(() => {
-    // Get list of bus names from server
     fetch(API_URL)
       .then((res) => res.json())
       .then((data) => setBuses(data))
       .catch(err => console.error("Error fetching buses:", err));
     
-    // Listen for students requesting stops
     socket.on("newPickupAlert", (data) => {
         setPickupRequests((prev) => [data, ...prev]);
-        // Vibrate phone for 200ms
         if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
     });
-
     return () => socket.off("newPickupAlert");
   }, []);
 
-  // 2. Keep Screen Awake (Wake Lock API)
   const requestWakeLock = async () => { 
     try { 
       if ('wakeLock' in navigator) {
         wakeLockRef.current = await navigator.wakeLock.request('screen');
       }
-    } catch(e) {
-      console.log("Wake Lock not supported on this device.");
-    } 
+    } catch(e) { console.log("Wake Lock not supported."); } 
   };
 
-  // 3. START SHIFT LOGIC
   const startShift = async () => {
     if (!selectedBus) return alert("❌ Please select a bus first!");
-    
     setIsDriving(true);
     await requestWakeLock();
 
     if (navigator.geolocation) {
-      // Watch position continuously
       navigator.geolocation.watchPosition(
         (position) => {
           const { latitude, longitude, speed } = position.coords;
-          
-          // Update Local View
           setMyLocation([latitude, longitude]);
-
-          // Send to Server (Students see this)
-          socket.emit("driverLocation", { 
-            busId: selectedBus, 
-            lat: latitude, 
-            lng: longitude, 
-            speed: speed || 0 
-          });
+          socket.emit("driverLocation", { busId: selectedBus, lat: latitude, lng: longitude, speed: speed || 0 });
         },
         (err) => console.error("GPS Error:", err),
         { enableHighAccuracy: true }
@@ -390,13 +430,12 @@ function DriverLogin() {
     }
   };
 
-  // 4. STOP SHIFT LOGIC (Explicit Delete)
   const stopShift = () => {
     if (window.confirm("End Shift? This will remove the bus from the Student Map.")) {
-      socket.emit("stopShift", selectedBus); // Tell server to delete bus
+      socket.emit("stopShift", selectedBus);
       if (wakeLockRef.current) wakeLockRef.current.release();
       setIsDriving(false);
-      window.location.reload(); // Reset app
+      window.location.reload();
     }
   };
 
@@ -407,71 +446,37 @@ function DriverLogin() {
   };
 
   return (
-    <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
-      
-      {/* HEADER BAR */}
+    <div style={{ height: "100vh", display: "flex", flexDirection: "column", background: "#f3f4f6" }}>
       <div style={{ background: "var(--primary)", padding: "16px", color: "white", display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: "0 2px 10px rgba(0,0,0,0.1)", zIndex: 1001 }}>
         <div>
             <div style={{ fontSize: "11px", opacity: 0.8, letterSpacing: "1px" }}>DRIVER PORTAL</div>
             <div style={{ fontWeight: "bold", fontSize: "16px" }}>{selectedBus || "Not Online"}</div>
         </div>
-        
         {isDriving && (
-          <button 
-            onClick={stopShift} 
-            className="btn" 
-            style={{ background: "#ef4444", color: "white", padding: "8px 16px", fontSize: "13px", border: "none" }}
-          >
-            End Shift
-          </button>
+          <button onClick={stopShift} className="btn" style={{ background: "#ef4444", color: "white", padding: "8px 16px", fontSize: "13px", border: "none" }}>End Shift</button>
         )}
       </div>
 
-      {/* VIEW 1: SELECTION SCREEN */}
       {!isDriving ? (
-        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px", background: "#f3f4f6" }}>
+        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}>
           <div className="card" style={{ width: "100%", maxWidth: "400px", textAlign: "center" }}>
             <h2 style={{ color: "var(--primary)", marginTop: 0 }}>Start Your Shift</h2>
             <p style={{ color: "#666", fontSize: "14px", marginBottom: "20px" }}>Select your vehicle to go online.</p>
-            
-            <select 
-              onChange={(e) => setSelectedBus(e.target.value)} 
-              style={{ marginBottom: "20px", width: "100%", padding: "12px", borderRadius: "8px", border: "1px solid #ccc" }}
-            >
+            <select onChange={(e) => setSelectedBus(e.target.value)} style={{ marginBottom: "20px" }}>
               <option value="">-- Choose Vehicle --</option>
               {buses.map((bus) => <option key={bus._id} value={bus.name}>{bus.name}</option>)}
             </select>
-            
-            <button 
-              onClick={startShift} 
-              className="btn btn-primary" 
-              style={{ width: "100%", padding: "15px", fontSize: "16px", background: "#10b981" }}
-            >
-              Go Online ▶
-            </button>
+            <button onClick={startShift} className="btn btn-primary" style={{ width: "100%", padding: "15px", fontSize: "16px", background: "#10b981" }}>Go Online ▶</button>
           </div>
         </div>
       ) : (
-        /* VIEW 2: DRIVING MODE (MAP) */
         <div style={{ flex: 1, position: "relative" }}>
-          
-          <LeafletMap 
-            center={myLocation || [5.1036, -1.2825]} 
-            zoom={16}
-            myLocation={myLocation}
-            pickupRequests={pickupRequests}
-            onPickupDismiss={removeRequest}
-          />
-
-          {/* GPS Waiting Overlay */}
+          <LeafletMap center={myLocation || [5.1036, -1.2825]} zoom={16} myLocation={myLocation} pickupRequests={pickupRequests} onPickupDismiss={removeRequest} />
           {!myLocation && (
              <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", zIndex: 9999, background: "rgba(0,0,0,0.8)", color: "white", padding: "20px", borderRadius: "10px", textAlign: "center" }}>
-               <div style={{ fontSize: "24px", marginBottom: "10px" }}>📡</div>
-               Waiting for GPS...
+               <div style={{ fontSize: "24px", marginBottom: "10px" }}>📡</div>Waiting for GPS...
              </div>
           )}
-
-          {/* Request List Overlay (Bottom Sheet) */}
           {pickupRequests.length > 0 && (
             <div className="overlay-panel slide-up" style={{ bottom: "20px", left: "20px", right: "20px", padding: "0", maxHeight: "40vh", overflowY: "auto", borderRadius: "16px" }}>
                 <div style={{ padding: "15px", borderBottom: "1px solid #eee", background: "#fff", borderRadius: "16px 16px 0 0" }}>
@@ -479,18 +484,8 @@ function DriverLogin() {
                 </div>
                 {pickupRequests.map((req, index) => (
                     <div key={index} style={{ padding: "15px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #f0f0f0" }}>
-                        <div>
-                          <span style={{ fontWeight: "bold", fontSize: "14px" }}>Passenger Waiting</span>
-                          <br/>
-                          <small style={{ color: "gray" }}>Request time: {req.time}</small>
-                        </div>
-                        <button 
-                          onClick={() => removeRequest(index)} 
-                          className="btn btn-outline" 
-                          style={{ padding: "6px 12px", fontSize: "12px" }}
-                        >
-                          Dismiss
-                        </button>
+                        <div><span style={{ fontWeight: "bold", fontSize: "14px" }}>Passenger Waiting</span><br/><small style={{ color: "gray" }}>Request time: {req.time}</small></div>
+                        <button onClick={() => removeRequest(index)} className="btn btn-outline" style={{ padding: "6px 12px", fontSize: "12px" }}>Dismiss</button>
                     </div>
                 ))}
             </div>
@@ -501,129 +496,71 @@ function DriverLogin() {
   );
 }
 
-// --- COMPONENT: AdminDashboard ---
+// --- ADMIN DASHBOARD ---
 function AdminDashboard() {
   const [buses, setBuses] = useState([]);
-  const [reports, setReports] = useState([]); // Stores student complaints
+  const [reports, setReports] = useState([]); 
   const [form, setForm] = useState({ name: "", route: "", plateNumber: "" });
 
   useEffect(() => {
-    // 1. Fetch Buses from Database
-    fetch(API_URL)
-      .then((res) => res.json())
-      .then((data) => setBuses(data))
-      .catch((err) => console.error("Error fetching buses:", err));
-
-    // 2. Listen for Live Reports from Students
-    socket.on("newReport", (data) => {
-      // alert(`⚠️ NEW ISSUE REPORTED: ${data.type}`);
-      setReports((prev) => [data, ...prev]); // Add new report to the top
-    });
-
+    fetch(API_URL).then((res) => res.json()).then((data) => setBuses(data)).catch((err) => console.error("Error fetching buses:", err));
+    socket.on("newReport", (data) => { setReports((prev) => [data, ...prev]); });
     return () => socket.off("newReport");
   }, []);
 
-  // Handle "Add Bus" Form Submit
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const response = await fetch(API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
-      
+      const response = await fetch(API_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
       const newBus = await response.json();
-      setBuses([...buses, newBus]); // Update list instantly
-      setForm({ name: "", route: "", plateNumber: "" }); // Reset form
+      setBuses([...buses, newBus]); 
+      setForm({ name: "", route: "", plateNumber: "" });
       alert("✅ Bus Added Successfully!");
-    } catch (err) {
-      alert("Error adding bus");
-    }
+    } catch (err) { alert("Error adding bus"); }
   };
 
   return (
-    <div style={{ padding: "20px", maxWidth: "800px", margin: "0 auto", height: "100vh", overflowY: "auto" }}>
+    <div style={{ padding: "20px", maxWidth: "800px", margin: "0 auto", height: "100vh", overflowY: "auto", background: "white" }}>
       <h1 style={{ borderBottom: "2px solid #333", paddingBottom: "10px" }}>🛠 Admin Control Center</h1>
-      
-      {/* --- LIVE ALERTS SECTION --- */}
       <div style={{ marginBottom: "30px" }}>
         <h3>🚨 Live Incident Reports</h3>
-        {reports.length === 0 ? (
-          <p style={{ color: "gray", fontStyle: "italic" }}>No active issues reported.</p>
-        ) : (
+        {reports.length === 0 ? <p style={{ color: "gray", fontStyle: "italic" }}>No active issues reported.</p> : (
           <div style={{ maxHeight: "200px", overflowY: "auto", border: "1px solid #ddd", padding: "10px" }}>
             {reports.map((r, index) => (
-              <div key={index} style={{ 
-                backgroundColor: "#fff3cd", 
-                borderLeft: "5px solid #ffc107", 
-                padding: "10px", 
-                marginBottom: "8px",
-                borderRadius: "4px"
-              }}>
-                <strong>⚠️ {r.type}</strong> <span style={{fontSize: "12px", color: "#666"}}>({r.time})</span>
-                <p style={{ margin: "5px 0 0 0" }}>{r.message}</p>
+              <div key={index} style={{ backgroundColor: "#fff3cd", borderLeft: "5px solid #ffc107", padding: "10px", marginBottom: "8px", borderRadius: "4px" }}>
+                <strong>⚠️ {r.type}</strong> <span style={{fontSize: "12px", color: "#666"}}>({r.time})</span><p style={{ margin: "5px 0 0 0" }}>{r.message}</p>
               </div>
             ))}
           </div>
         )}
       </div>
-
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "20px" }}>
-        
-        {/* --- ADD BUS FORM --- */}
         <div style={{ background: "#f8f9fa", padding: "20px", borderRadius: "10px", boxShadow: "0 2px 4px rgba(0,0,0,0.1)" }}>
           <h3>➕ Add New Shuttle</h3>
           <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-            <input 
-              placeholder="Bus Name (e.g. Shuttle D)" 
-              value={form.name}
-              onChange={(e) => setForm({...form, name: e.target.value})}
-              required
-            />
-            <input 
-              placeholder="Route (e.g. Science <-> Valco)" 
-              value={form.route}
-              onChange={(e) => setForm({...form, route: e.target.value})}
-              required
-            />
-            <input 
-              placeholder="Plate Number (e.g. WR-2024-X)" 
-              value={form.plateNumber}
-              onChange={(e) => setForm({...form, plateNumber: e.target.value})}
-              required
-            />
-            <button type="submit" style={{ padding: "10px", background: "#28a745", color: "white", border: "none", cursor: "pointer", borderRadius: "5px", fontWeight: "bold" }}>
-              Save to Database
-            </button>
+            <input placeholder="Bus Name (e.g. Shuttle D)" value={form.name} onChange={(e) => setForm({...form, name: e.target.value})} required />
+            <input placeholder="Route (e.g. Science <-> Valco)" value={form.route} onChange={(e) => setForm({...form, route: e.target.value})} required />
+            <input placeholder="Plate Number (e.g. WR-2024-X)" value={form.plateNumber} onChange={(e) => setForm({...form, plateNumber: e.target.value})} required />
+            <button type="submit" style={{ padding: "10px", background: "#28a745", color: "white", border: "none", cursor: "pointer", borderRadius: "5px", fontWeight: "bold" }}>Save to Database</button>
           </form>
         </div>
-
-        {/* --- BUS LIST --- */}
         <div style={{ background: "white", padding: "20px", border: "1px solid #eee", borderRadius: "10px" }}>
           <h3>🚌 Registered Fleet</h3>
           <ul style={{ listStyle: "none", padding: 0 }}>
             {buses.map((bus) => (
               <li key={bus._id} style={{ borderBottom: "1px solid #eee", padding: "10px 0", display: "flex", justifyContent: "space-between" }}>
-                <div>
-                  <strong>{bus.name}</strong>
-                  <div style={{ fontSize: "12px", color: "gray" }}>{bus.route}</div>
-                </div>
-                <div style={{ textAlign: "right" }}>
-                  <span style={{ background: "#e2e6ea", padding: "2px 6px", borderRadius: "4px", fontSize: "12px" }}>{bus.plateNumber}</span>
-                </div>
+                <div><strong>{bus.name}</strong><div style={{ fontSize: "12px", color: "gray" }}>{bus.route}</div></div>
+                <div style={{ textAlign: "right" }}><span style={{ background: "#e2e6ea", padding: "2px 6px", borderRadius: "4px", fontSize: "12px" }}>{bus.plateNumber}</span></div>
               </li>
             ))}
           </ul>
         </div>
-
       </div>
     </div>
   );
 }
 
-// --- USER PROVIDED LOGIN COMPONENT ---
-
+// --- LOGIN COMPONENT ---
 function Login({ onLogin, onBack }) {
   const [role, setRole] = useState("driver");
   const [password, setPassword] = useState("");
@@ -631,7 +568,6 @@ function Login({ onLogin, onBack }) {
 
   const handleLogin = (e) => {
     e.preventDefault();
-    // HARDCODED PASSWORDS FOR DEMO
     if (role === "admin" && password === "admin123") onLogin("admin");
     else if (role === "driver" && password === "driver123") onLogin("driver");
     else setError("❌ Invalid Access Key");
@@ -639,51 +575,47 @@ function Login({ onLogin, onBack }) {
 
   return (
     <div style={{ height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--primary)" }}>
+      <RippleBackground />
       <div className="card slide-up" style={{ width: "100%", maxWidth: "380px" }}>
-        
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "20px" }}>
           <h2 style={{ margin: 0, color: "var(--primary)" }}>Portal Login</h2>
           <button onClick={onBack} style={{ background: "none", border: "none", fontSize: "20px", cursor: "pointer" }}>✕</button>
         </div>
-
         <form onSubmit={handleLogin}>
-          {/* Role Toggle */}
           <div style={{ display: "flex", background: "#f3f4f6", padding: "4px", borderRadius: "10px", marginBottom: "20px" }}>
             <button type="button" onClick={() => setRole("driver")} style={{ flex: 1, padding: "8px", borderRadius: "8px", border: "none", background: role === "driver" ? "white" : "transparent", boxShadow: role === "driver" ? "0 2px 4px rgba(0,0,0,0.1)" : "none", fontWeight: "600", color: role === "driver" ? "var(--primary)" : "#6b7280" }}>Driver</button>
             <button type="button" onClick={() => setRole("admin")} style={{ flex: 1, padding: "8px", borderRadius: "8px", border: "none", background: role === "admin" ? "white" : "transparent", boxShadow: role === "admin" ? "0 2px 4px rgba(0,0,0,0.1)" : "none", fontWeight: "600", color: role === "admin" ? "var(--primary)" : "#6b7280" }}>Admin</button>
           </div>
-
           <div style={{ marginBottom: "20px" }}>
             <label style={{ display: "block", fontSize: "13px", fontWeight: "600", marginBottom: "8px", color: "#374151" }}>Access Key</label>
             <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Enter PIN..." autoFocus />
           </div>
-
           {error && <p style={{ color: "var(--error)", fontSize: "14px", marginTop: "-10px", marginBottom: "15px" }}>{error}</p>}
-
-          <button type="submit" className="btn btn-primary" style={{ width: "100%" }}>
-            {role === "admin" ? "Open Dashboard" : "Start Shift"}
-          </button>
+          <button type="submit" className="btn btn-primary" style={{ width: "100%" }}>{role === "admin" ? "Open Dashboard" : "Start Shift"}</button>
         </form>
       </div>
     </div>
   );
 }
 
-// --- USER PROVIDED APP COMPONENT ---
-
+// --- MAIN APP ---
 function App() {
   const [view, setView] = useState("home"); 
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [secretCount, setSecretCount] = useState(0); // For the hidden door
+  const [secretCount, setSecretCount] = useState(0); 
+  const [isLoading, setIsLoading] = useState(true);
 
-  // --- HIDDEN ACCESS LOGIC ---
+  // Fake Loading effect on mount
+  useEffect(() => {
+    const timer = setTimeout(() => setIsLoading(false), 3000);
+    return () => clearTimeout(timer);
+  }, []);
+
   const handleSecretClick = () => {
     setSecretCount(prev => prev + 1);
-    
-    // If clicked 5 times, open the hidden login
     if (secretCount + 1 >= 5) {
       setView("login");
-      setSecretCount(0); // Reset
+      setSecretCount(0);
     }
   };
 
@@ -692,17 +624,23 @@ function App() {
     setView(role);
   };
 
+  if (isLoading) return (
+    <>
+      <style>{styles}</style>
+      <SplashScreen />
+    </>
+  );
+
   return (
     <div>
       <style>{styles}</style>
-      {/* 1. HOME SCREEN */}
+      {/* 1. HOME SCREEN WITH RIPPLE BACKGROUND */}
       {view === "home" && (
-        <div style={{ height: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%)" }}>
+        <div style={{ height: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", position: "relative" }}>
+          <RippleBackground />
           
-          <div className="card" style={{ textAlign: "center", maxWidth: "400px", width: "90%", padding: "40px" }}>
+          <div className="card slide-up" style={{ textAlign: "center", maxWidth: "400px", width: "90%", padding: "40px" }}>
             <div style={{ fontSize: "60px", marginBottom: "10px" }}>🚌</div>
-            
-            {/* HIDDEN TRIGGER: CLICK THIS TEXT 5 TIMES */}
             <h1 
               onClick={handleSecretClick}
               style={{ margin: "0 0 10px 0", color: "var(--primary)", cursor: "pointer", userSelect: "none" }}
@@ -710,16 +648,13 @@ function App() {
             >
               UCC Shuttle
             </h1>
-            
             <p style={{ color: "var(--text-sub)", marginBottom: "30px" }}>Real-time Campus Transit System</p>
-            
-            {/* ONLY STUDENT BUTTON IS VISIBLE */}
             <button onClick={() => setView("map")} className="btn btn-primary" style={{ width: "100%", padding: "15px", fontSize: "18px" }}>
               🗺 View Live Map
             </button>
           </div>
 
-          <p style={{ marginTop: "30px", fontSize: "12px", color: "#9ca3af" }}>
+          <p style={{ marginTop: "30px", fontSize: "12px", color: "rgba(255,255,255,0.7)", zIndex: 1 }}>
             University of Cape Coast • IT Services
           </p>
         </div>
