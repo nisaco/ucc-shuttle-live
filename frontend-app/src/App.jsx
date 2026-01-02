@@ -2,9 +2,11 @@ import React, { useState, useEffect, useRef } from "react";
 import io from "socket.io-client";
 
 // --- CONFIGURATION ---
-const SERVER_URL = "https://ucc-shuttle-live.onrender.com"; 
-const API_URL = `${SERVER_URL}/api/buses`;
-const socket = io.connect(SERVER_URL);
+// CHANGED: Use relative path ("") so it connects to the current server (Same Origin).
+// This fixes CORS errors when deploying to new Render URLs.
+const SERVER_URL = ""; 
+const API_URL = `/api/buses`;
+const socket = io.connect("/"); // Connects to the same domain serving the site
 
 // --- CSS STYLES ---
 const styles = `
